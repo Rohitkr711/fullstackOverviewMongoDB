@@ -2,7 +2,8 @@ import User from "../model/User.model.js";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
-import { json } from "stream/consumers";
+import bcrypt from "bcryptjs";
+import JWT from "jsonwebtoken";
 
 dotenv.config();
 
@@ -23,7 +24,7 @@ export const registerController = async (req, res) => {
     // -> send token through mail to user
     // -> send success status to user
     console.log("Inside register controller");
-    
+
 
     const { name: userName, email, password } = req.body;
     if (!userName || !email || !password) {
@@ -99,7 +100,7 @@ export const registerController = async (req, res) => {
             MailSentTo: info.envelope.to[0],
         });
 
-        
+
     } catch (error) {
         console.log("Error:", error);
 
@@ -128,6 +129,9 @@ export const verifyController = async (req, res) => {
     // remove verification token
     // save
     // return response
+
+    console.log("Inside verify controller");
+
 
     const { token } = req.params;
 
@@ -163,4 +167,76 @@ export const verifyController = async (req, res) => {
     }
 
 
+}
+
+export const loginController = async (req, res) => {
+
+    console.log("Inside login");
+    
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({
+            message: "All fields are required",
+            success: false,
+        })
+    }
+
+    try {
+
+        const user = await User.findOne({ email });
+        if (!user) {
+            res.status(400).json({
+                message: "Invalid username or password",
+                seccess: false,
+            })
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            res.status(400).json({
+                message: "Invalid username or password",
+                seccess: false,
+            })
+        }
+        if (!user.isVerified) {
+            res.status(400).json({
+                message: "user isn't verified",
+                seccess: false,
+            })
+        }
+
+        // JWT TOKEN
+        const token = JWT.sign(
+            { id: user._id, role: user.role },
+            'shhhh',
+            { expiresIn: '24h' },
+        )
+
+        const cookieOptions = {
+            httpOnly: true,
+            secure: true,
+            maxAge: 24 * 60 * 60 * 1000
+
+        }
+
+        res.cookie('test', token, cookieOptions);
+
+        res.status(200).json({
+            message: "LoggedIn Successfully",
+            success: true,
+            user: {
+                id: user._id,
+                name: user.email,
+                role: user.role,
+            }
+        })
+
+    } catch (error) {
+        res.status(500).json({
+            message: "Internal server error",
+            seccess: false,
+            error: error.message,
+        })
+    }
 }
